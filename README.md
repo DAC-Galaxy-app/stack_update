@@ -5,3 +5,8 @@
 - 김동현: watch 앱 + web dash
 
 ---------------
+
+### 참고 주소
+# samsung Health Research Stack 
+https://github.com/S-HealthStack
+
