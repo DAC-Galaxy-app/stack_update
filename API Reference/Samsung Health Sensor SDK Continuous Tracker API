@@ -1,0 +1,1091 @@
+# 02. Samsung Health Sensor SDK Continuous Tracker API
+
+## 1. 목적
+
+이 문서는 Galaxy Watch에서 **연속 측정(continuous tracking)** 으로 수집 가능한 Samsung Health Sensor SDK API를 정리한다.
+
+Continuous Tracker는 `HealthTracker.setEventListener()`를 호출하면 데이터 수신이 시작되고, `unsetEventListener()`를 호출할 때까지 지속적으로 `onDataReceived()`를 통해 `DataPoint`가 전달된다.
+
+---
+
+## 2. Continuous Tracker 목록
+
+| Sensor | TrackerType | ValueKey Set | 권장 파일 |
+|---|---|---|---|
+| Heart Rate / IBI | `HEART_RATE_CONTINUOUS` | `ValueKey.HeartRateSet` | `HeartRateTrackerManager.kt` |
+| PPG Green / Red / IR | `PPG_CONTINUOUS` | `ValueKey.PpgSet` | `PpgTrackerManager.kt` |
+| Accelerometer | `ACCELEROMETER_CONTINUOUS` | `ValueKey.AccelerometerSet` | `AccelerometerTrackerManager.kt` |
+| Skin Temperature | `SKIN_TEMPERATURE_CONTINUOUS` | `ValueKey.SkinTemperatureSet` | `SkinTemperatureTrackerManager.kt` |
+| EDA | `EDA_CONTINUOUS` | `ValueKey.EdaSet` | `EdaTrackerManager.kt` |
+
+---
+
+## 3. 공통 호출 구조
+
+```kotlin
+private var tracker: HealthTracker? = null
+
+private fun createTracker() {
+    tracker = healthTrackingService.getHealthTracker(
+        HealthTrackerType.HEART_RATE_CONTINUOUS
+    )
+}
+
+private fun startTracking() {
+    tracker?.setEventListener(listener)
+}
+
+private fun stopTracking() {
+    tracker?.unsetEventListener()
+}
+```
+
+---
+
+## 4. 공통 Listener 구조
+
+```kotlin
+private val listener = object : HealthTracker.TrackerEventListener {
+
+    override fun onDataReceived(dataPoints: List<DataPoint>) {
+        dataPoints.forEach { dataPoint ->
+            val timestamp = dataPoint.timestamp
+
+            // dataPoint.getValue(ValueKey...)
+        }
+    }
+
+    override fun onFlushCompleted() {
+        Log.d("Sensor", "Flush completed")
+    }
+
+    override fun onError(error: HealthTracker.TrackerError) {
+        Log.e("Sensor", "Tracker error: $error")
+    }
+}
+```
+
+---
+
+# 5. Heart Rate / IBI API
+
+## 5.1 TrackerType
+
+```kotlin
+HealthTrackerType.HEART_RATE_CONTINUOUS
+```
+
+## 5.2 ValueKey Set
+
+```kotlin
+ValueKey.HeartRateSet
+```
+
+`ValueKey.HeartRateSet`은 `HEART_RATE_CONTINUOUS`를 위한 data set이다.
+
+---
+
+## 5.3 ValueKey 목록
+
+| ValueKey | Type | 의미 | 단위 |
+|---|---|---|---|
+| `ValueKey.HeartRateSet.HEART_RATE` | `Integer` | Heart rate value | bpm |
+| `ValueKey.HeartRateSet.HEART_RATE_STATUS` | `Integer` | Heart rate measurement status | status code |
+| `ValueKey.HeartRateSet.IBI_LIST` | `List<Integer>` | Inter-beat interval list | ms |
+| `ValueKey.HeartRateSet.IBI_STATUS_LIST` | `List<Integer>` | IBI measurement status list | status code |
+
+공식 문서 기준 `HEART_RATE`는 bpm 단위의 심박수이고, `IBI_LIST`는 millisecond 단위의 inter-beat interval list이다.
+
+---
+
+## 5.4 Status Code
+
+### `HEART_RATE_STATUS`
+
+| Code | 의미 |
+|---|---|
+| `-999` | Higher priority sensor, such as BIA, is operating |
+| `-10` | PPG signal is too weak or user movement is too large |
+| `-8` | PPG signal is weak or user moved |
+| `-3` | Wearable is detached |
+| `-2` | Wearable movement is detected |
+| `0` | Initial measuring state, or higher priority sensor is operating |
+| `1` | Successful heart rate measurement |
+
+### `IBI_STATUS_LIST`
+
+| Code | 의미 |
+|---|---|
+| `-1` | Error |
+| `0` | Normal |
+
+---
+
+## 5.5 저장 변수명
+
+```kotlin
+val timestamp: Long
+val heartRate: Int
+val heartRateStatus: Int
+val ibiList: List<Int>
+val ibiStatusList: List<Int>
+```
+
+---
+
+## 5.6 권장 파일
+
+```text
+watch-app/sensor/HeartRateTrackerManager.kt
+```
+
+---
+
+## 5.7 예제 코드
+
+```kotlin
+class HeartRateTrackerManager(
+    private val healthTrackingService: HealthTrackingService,
+    private val onSampleReceived: (
+        sensorType: String,
+        timestamp: Long,
+        valueName: String,
+        value: String,
+        status: Int?
+    ) -> Unit
+) {
+
+    private var heartRateTracker: HealthTracker? = null
+
+    fun createTracker() {
+        heartRateTracker = healthTrackingService.getHealthTracker(
+            HealthTrackerType.HEART_RATE_CONTINUOUS
+        )
+    }
+
+    fun startTracking() {
+        heartRateTracker?.setEventListener(heartRateListener)
+    }
+
+    fun stopTracking() {
+        heartRateTracker?.unsetEventListener()
+    }
+
+    private val heartRateListener = object : HealthTracker.TrackerEventListener {
+
+        override fun onDataReceived(dataPoints: List<DataPoint>) {
+            dataPoints.forEach { dataPoint ->
+
+                val timestamp = dataPoint.timestamp
+
+                val heartRate = dataPoint.getValue(
+                    ValueKey.HeartRateSet.HEART_RATE
+                )
+
+                val heartRateStatus = dataPoint.getValue(
+                    ValueKey.HeartRateSet.HEART_RATE_STATUS
+                )
+
+                val ibiList = dataPoint.getValue(
+                    ValueKey.HeartRateSet.IBI_LIST
+                )
+
+                val ibiStatusList = dataPoint.getValue(
+                    ValueKey.HeartRateSet.IBI_STATUS_LIST
+                )
+
+                onSampleReceived(
+                    "HEART_RATE",
+                    timestamp,
+                    "heart_rate",
+                    heartRate.toString(),
+                    heartRateStatus
+                )
+
+                ibiList?.forEachIndexed { index, ibi ->
+                    val ibiStatus = ibiStatusList?.getOrNull(index)
+
+                    onSampleReceived(
+                        "IBI",
+                        timestamp,
+                        "ibi_$index",
+                        ibi.toString(),
+                        ibiStatus
+                    )
+                }
+            }
+        }
+
+        override fun onFlushCompleted() {
+            Log.d("HeartRateTracker", "Flush completed")
+        }
+
+        override fun onError(error: HealthTracker.TrackerError) {
+            Log.e("HeartRateTracker", "Error: $error")
+        }
+    }
+}
+```
+
+---
+
+# 6. PPG Green / Red / IR API
+
+## 6.1 TrackerType
+
+```kotlin
+HealthTrackerType.PPG_CONTINUOUS
+```
+
+## 6.2 ValueKey Set
+
+```kotlin
+ValueKey.PpgSet
+```
+
+`ValueKey.PpgSet`은 `PPG_CONTINUOUS`와 `PPG_ON_DEMAND`에서 사용하는 data set이다.
+
+---
+
+## 6.3 PpgType
+
+PPG tracker는 사용할 LED 채널을 지정할 수 있다.
+
+```kotlin
+PpgType.GREEN
+PpgType.RED
+PpgType.IR
+```
+
+---
+
+## 6.4 Tracker 생성
+
+```kotlin
+val ppgTypes = setOf(
+    PpgType.GREEN,
+    PpgType.RED,
+    PpgType.IR
+)
+
+val ppgTracker = healthTrackingService.getHealthTracker(
+    HealthTrackerType.PPG_CONTINUOUS,
+    ppgTypes
+)
+```
+
+---
+
+## 6.5 ValueKey 목록
+
+| ValueKey | Type | 의미 |
+|---|---|---|
+| `ValueKey.PpgSet.PPG_GREEN` | `Integer` | Green LED PPG ADC value |
+| `ValueKey.PpgSet.PPG_RED` | `Integer` | Red PPG raw value |
+| `ValueKey.PpgSet.PPG_IR` | `Integer` | Infrared PPG raw value |
+| `ValueKey.PpgSet.GREEN_STATUS` | `Integer` | Green PPG status |
+| `ValueKey.PpgSet.RED_STATUS` | `Integer` | Red PPG status |
+| `ValueKey.PpgSet.IR_STATUS` | `Integer` | IR PPG status |
+
+---
+
+## 6.6 Status Code
+
+### `PPG_CONTINUOUS` Status
+
+| Code | 의미 |
+|---|---|
+| `-1` | Higher priority sensor, such as BIA, is operating |
+| `0` | Normal value |
+
+### `PPG_ON_DEMAND` Status
+
+| Code | 의미 |
+|---|---|
+| `-1` | Error value |
+| `0` | Normal value |
+
+---
+
+## 6.7 저장 변수명
+
+```kotlin
+val timestamp: Long
+val ppgGreen: Int
+val ppgRed: Int
+val ppgIr: Int
+val greenStatus: Int
+val redStatus: Int
+val irStatus: Int
+```
+
+---
+
+## 6.8 권장 파일
+
+```text
+watch-app/sensor/PpgTrackerManager.kt
+```
+
+---
+
+## 6.9 예제 코드
+
+```kotlin
+class PpgTrackerManager(
+    private val healthTrackingService: HealthTrackingService,
+    private val onSampleReceived: (
+        sensorType: String,
+        timestamp: Long,
+        valueName: String,
+        value: String,
+        status: Int?
+    ) -> Unit
+) {
+
+    private var ppgTracker: HealthTracker? = null
+
+    fun createTracker() {
+        val ppgTypes = setOf(
+            PpgType.GREEN,
+            PpgType.RED,
+            PpgType.IR
+        )
+
+        ppgTracker = healthTrackingService.getHealthTracker(
+            HealthTrackerType.PPG_CONTINUOUS,
+            ppgTypes
+        )
+    }
+
+    fun startTracking() {
+        ppgTracker?.setEventListener(ppgListener)
+    }
+
+    fun stopTracking() {
+        ppgTracker?.unsetEventListener()
+    }
+
+    private val ppgListener = object : HealthTracker.TrackerEventListener {
+
+        override fun onDataReceived(dataPoints: List<DataPoint>) {
+            dataPoints.forEach { dataPoint ->
+
+                val timestamp = dataPoint.timestamp
+
+                val ppgGreen = dataPoint.getValue(
+                    ValueKey.PpgSet.PPG_GREEN
+                )
+
+                val ppgRed = dataPoint.getValue(
+                    ValueKey.PpgSet.PPG_RED
+                )
+
+                val ppgIr = dataPoint.getValue(
+                    ValueKey.PpgSet.PPG_IR
+                )
+
+                val greenStatus = dataPoint.getValue(
+                    ValueKey.PpgSet.GREEN_STATUS
+                )
+
+                val redStatus = dataPoint.getValue(
+                    ValueKey.PpgSet.RED_STATUS
+                )
+
+                val irStatus = dataPoint.getValue(
+                    ValueKey.PpgSet.IR_STATUS
+                )
+
+                onSampleReceived(
+                    "PPG",
+                    timestamp,
+                    "ppg_green",
+                    ppgGreen.toString(),
+                    greenStatus
+                )
+
+                onSampleReceived(
+                    "PPG",
+                    timestamp,
+                    "ppg_red",
+                    ppgRed.toString(),
+                    redStatus
+                )
+
+                onSampleReceived(
+                    "PPG",
+                    timestamp,
+                    "ppg_ir",
+                    ppgIr.toString(),
+                    irStatus
+                )
+            }
+        }
+
+        override fun onFlushCompleted() {
+            Log.d("PpgTracker", "Flush completed")
+        }
+
+        override fun onError(error: HealthTracker.TrackerError) {
+            Log.e("PpgTracker", "Error: $error")
+        }
+    }
+}
+```
+
+---
+
+# 7. Accelerometer API
+
+## 7.1 TrackerType
+
+```kotlin
+HealthTrackerType.ACCELEROMETER_CONTINUOUS
+```
+
+## 7.2 ValueKey Set
+
+```kotlin
+ValueKey.AccelerometerSet
+```
+
+`ValueKey.AccelerometerSet`은 `ACCELEROMETER_CONTINUOUS`용 data set이다.
+
+---
+
+## 7.3 ValueKey 목록
+
+| ValueKey | Type | 의미 |
+|---|---|---|
+| `ValueKey.AccelerometerSet.ACCELEROMETER_X` | `Integer` | X-axis accelerometer raw data |
+| `ValueKey.AccelerometerSet.ACCELEROMETER_Y` | `Integer` | Y-axis accelerometer raw data |
+| `ValueKey.AccelerometerSet.ACCELEROMETER_Z` | `Integer` | Z-axis accelerometer raw data |
+
+공식 문서 기준 Accelerometer 값은 gravity를 포함하지 않는 raw data이다.
+
+---
+
+## 7.4 단위 변환
+
+공식 문서 기준 raw value는 아래 식으로 `m/s²`로 변환할 수 있다.
+
+```text
+m/s² = (9.81 / (16383.75 / 4.0)) * rawValue
+```
+
+---
+
+## 7.5 저장 변수명
+
+```kotlin
+val timestamp: Long
+val accX: Int
+val accY: Int
+val accZ: Int
+```
+
+변환값까지 저장할 경우:
+
+```kotlin
+val accXMps2: Float
+val accYMps2: Float
+val accZMps2: Float
+```
+
+---
+
+## 7.6 권장 파일
+
+```text
+watch-app/sensor/AccelerometerTrackerManager.kt
+```
+
+---
+
+## 7.7 예제 코드
+
+```kotlin
+class AccelerometerTrackerManager(
+    private val healthTrackingService: HealthTrackingService,
+    private val onSampleReceived: (
+        sensorType: String,
+        timestamp: Long,
+        valueName: String,
+        value: String,
+        status: Int?
+    ) -> Unit
+) {
+
+    private var accelerometerTracker: HealthTracker? = null
+
+    fun createTracker() {
+        accelerometerTracker = healthTrackingService.getHealthTracker(
+            HealthTrackerType.ACCELEROMETER_CONTINUOUS
+        )
+    }
+
+    fun startTracking() {
+        accelerometerTracker?.setEventListener(accelerometerListener)
+    }
+
+    fun stopTracking() {
+        accelerometerTracker?.unsetEventListener()
+    }
+
+    private fun convertRawToMps2(rawValue: Int): Float {
+        return ((9.81f / (16383.75f / 4.0f)) * rawValue)
+    }
+
+    private val accelerometerListener = object : HealthTracker.TrackerEventListener {
+
+        override fun onDataReceived(dataPoints: List<DataPoint>) {
+            dataPoints.forEach { dataPoint ->
+
+                val timestamp = dataPoint.timestamp
+
+                val accX = dataPoint.getValue(
+                    ValueKey.AccelerometerSet.ACCELEROMETER_X
+                )
+
+                val accY = dataPoint.getValue(
+                    ValueKey.AccelerometerSet.ACCELEROMETER_Y
+                )
+
+                val accZ = dataPoint.getValue(
+                    ValueKey.AccelerometerSet.ACCELEROMETER_Z
+                )
+
+                onSampleReceived(
+                    "ACCELEROMETER",
+                    timestamp,
+                    "accelerometer_x_raw",
+                    accX.toString(),
+                    null
+                )
+
+                onSampleReceived(
+                    "ACCELEROMETER",
+                    timestamp,
+                    "accelerometer_y_raw",
+                    accY.toString(),
+                    null
+                )
+
+                onSampleReceived(
+                    "ACCELEROMETER",
+                    timestamp,
+                    "accelerometer_z_raw",
+                    accZ.toString(),
+                    null
+                )
+
+                onSampleReceived(
+                    "ACCELEROMETER",
+                    timestamp,
+                    "accelerometer_x_mps2",
+                    convertRawToMps2(accX).toString(),
+                    null
+                )
+
+                onSampleReceived(
+                    "ACCELEROMETER",
+                    timestamp,
+                    "accelerometer_y_mps2",
+                    convertRawToMps2(accY).toString(),
+                    null
+                )
+
+                onSampleReceived(
+                    "ACCELEROMETER",
+                    timestamp,
+                    "accelerometer_z_mps2",
+                    convertRawToMps2(accZ).toString(),
+                    null
+                )
+            }
+        }
+
+        override fun onFlushCompleted() {
+            Log.d("AccelerometerTracker", "Flush completed")
+        }
+
+        override fun onError(error: HealthTracker.TrackerError) {
+            Log.e("AccelerometerTracker", "Error: $error")
+        }
+    }
+}
+```
+
+---
+
+# 8. Skin Temperature API
+
+## 8.1 TrackerType
+
+Continuous:
+
+```kotlin
+HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS
+```
+
+On-demand:
+
+```kotlin
+HealthTrackerType.SKIN_TEMPERATURE_ON_DEMAND
+```
+
+이 문서에서는 continuous 사용을 기준으로 정리한다.
+
+---
+
+## 8.2 ValueKey Set
+
+```kotlin
+ValueKey.SkinTemperatureSet
+```
+
+`ValueKey.SkinTemperatureSet`은 `SKIN_TEMPERATURE_CONTINUOUS`와 `SKIN_TEMPERATURE_ON_DEMAND` 모두에서 사용된다.
+
+---
+
+## 8.3 ValueKey 목록
+
+| ValueKey | Type | 의미 | 단위 |
+|---|---|---|---|
+| `ValueKey.SkinTemperatureSet.OBJECT_TEMPERATURE` | `Float` | Galaxy Watch와 접촉한 object temperature | Celsius |
+| `ValueKey.SkinTemperatureSet.AMBIENT_TEMPERATURE` | `Float` | Galaxy Watch 주변 ambient temperature | Celsius |
+| `ValueKey.SkinTemperatureSet.STATUS` | `Integer` | Temperature measurement status | status code |
+
+---
+
+## 8.4 Status Code
+
+| Code | 의미 |
+|---|---|
+| `-1` | Error |
+| `0` | Normal |
+
+---
+
+## 8.5 저장 변수명
+
+```kotlin
+val timestamp: Long
+val objectTemperature: Float
+val ambientTemperature: Float
+val temperatureStatus: Int
+```
+
+---
+
+## 8.6 권장 파일
+
+```text
+watch-app/sensor/SkinTemperatureTrackerManager.kt
+```
+
+---
+
+## 8.7 예제 코드
+
+```kotlin
+class SkinTemperatureTrackerManager(
+    private val healthTrackingService: HealthTrackingService,
+    private val onSampleReceived: (
+        sensorType: String,
+        timestamp: Long,
+        valueName: String,
+        value: String,
+        status: Int?
+    ) -> Unit
+) {
+
+    private var skinTemperatureTracker: HealthTracker? = null
+
+    fun createTracker() {
+        skinTemperatureTracker = healthTrackingService.getHealthTracker(
+            HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS
+        )
+    }
+
+    fun startTracking() {
+        skinTemperatureTracker?.setEventListener(skinTemperatureListener)
+    }
+
+    fun stopTracking() {
+        skinTemperatureTracker?.unsetEventListener()
+    }
+
+    private val skinTemperatureListener = object : HealthTracker.TrackerEventListener {
+
+        override fun onDataReceived(dataPoints: List<DataPoint>) {
+            dataPoints.forEach { dataPoint ->
+
+                val timestamp = dataPoint.timestamp
+
+                val objectTemperature = dataPoint.getValue(
+                    ValueKey.SkinTemperatureSet.OBJECT_TEMPERATURE
+                )
+
+                val ambientTemperature = dataPoint.getValue(
+                    ValueKey.SkinTemperatureSet.AMBIENT_TEMPERATURE
+                )
+
+                val status = dataPoint.getValue(
+                    ValueKey.SkinTemperatureSet.STATUS
+                )
+
+                onSampleReceived(
+                    "SKIN_TEMPERATURE",
+                    timestamp,
+                    "object_temperature_celsius",
+                    objectTemperature.toString(),
+                    status
+                )
+
+                onSampleReceived(
+                    "SKIN_TEMPERATURE",
+                    timestamp,
+                    "ambient_temperature_celsius",
+                    ambientTemperature.toString(),
+                    status
+                )
+            }
+        }
+
+        override fun onFlushCompleted() {
+            Log.d("SkinTemperatureTracker", "Flush completed")
+        }
+
+        override fun onError(error: HealthTracker.TrackerError) {
+            Log.e("SkinTemperatureTracker", "Error: $error")
+        }
+    }
+}
+```
+
+---
+
+# 9. EDA API
+
+## 9.1 TrackerType
+
+```kotlin
+HealthTrackerType.EDA_CONTINUOUS
+```
+
+## 9.2 ValueKey Set
+
+```kotlin
+ValueKey.EdaSet
+```
+
+`ValueKey.EdaSet`은 `EDA_CONTINUOUS`용 data set이다.
+
+---
+
+## 9.3 ValueKey 목록
+
+| ValueKey | Type | 의미 | 단위 |
+|---|---|---|---|
+| `ValueKey.EdaSet.SKIN_CONDUCTANCE` | `Float` | Skin conductance | microsiemens, `µS` |
+| `ValueKey.EdaSet.STATUS` | `Integer` | EDA measurement status | status code |
+
+---
+
+## 9.4 Status Code
+
+| Code | 의미 |
+|---|---|
+| `0` | Normal |
+| `-5` | Watch has been detached from the wrist |
+| `-10` | EDA signal quality is low |
+
+---
+
+## 9.5 저장 변수명
+
+```kotlin
+val timestamp: Long
+val skinConductance: Float
+val edaStatus: Int
+```
+
+---
+
+## 9.6 권장 파일
+
+```text
+watch-app/sensor/EdaTrackerManager.kt
+```
+
+---
+
+## 9.7 예제 코드
+
+```kotlin
+class EdaTrackerManager(
+    private val healthTrackingService: HealthTrackingService,
+    private val onSampleReceived: (
+        sensorType: String,
+        timestamp: Long,
+        valueName: String,
+        value: String,
+        status: Int?
+    ) -> Unit
+) {
+
+    private var edaTracker: HealthTracker? = null
+
+    fun createTracker() {
+        edaTracker = healthTrackingService.getHealthTracker(
+            HealthTrackerType.EDA_CONTINUOUS
+        )
+    }
+
+    fun startTracking() {
+        edaTracker?.setEventListener(edaListener)
+    }
+
+    fun stopTracking() {
+        edaTracker?.unsetEventListener()
+    }
+
+    private val edaListener = object : HealthTracker.TrackerEventListener {
+
+        override fun onDataReceived(dataPoints: List<DataPoint>) {
+            dataPoints.forEach { dataPoint ->
+
+                val timestamp = dataPoint.timestamp
+
+                val skinConductance = dataPoint.getValue(
+                    ValueKey.EdaSet.SKIN_CONDUCTANCE
+                )
+
+                val status = dataPoint.getValue(
+                    ValueKey.EdaSet.STATUS
+                )
+
+                onSampleReceived(
+                    "EDA",
+                    timestamp,
+                    "skin_conductance_us",
+                    skinConductance.toString(),
+                    status
+                )
+            }
+        }
+
+        override fun onFlushCompleted() {
+            Log.d("EdaTracker", "Flush completed")
+        }
+
+        override fun onError(error: HealthTracker.TrackerError) {
+            Log.e("EdaTracker", "Error: $error")
+        }
+    }
+}
+```
+
+---
+
+# 10. Continuous Recording 통합 Manager 예시
+
+```kotlin
+class ContinuousRecordingManager(
+    private val healthTrackingService: HealthTrackingService,
+    private val supportedTypes: List<HealthTrackerType>,
+    private val onSampleReceived: (
+        sensorType: String,
+        timestamp: Long,
+        valueName: String,
+        value: String,
+        status: Int?
+    ) -> Unit
+) {
+
+    private var heartRateManager: HeartRateTrackerManager? = null
+    private var ppgManager: PpgTrackerManager? = null
+    private var accelerometerManager: AccelerometerTrackerManager? = null
+    private var skinTemperatureManager: SkinTemperatureTrackerManager? = null
+    private var edaManager: EdaTrackerManager? = null
+
+    fun createTrackers() {
+        if (supportedTypes.contains(HealthTrackerType.HEART_RATE_CONTINUOUS)) {
+            heartRateManager = HeartRateTrackerManager(
+                healthTrackingService,
+                onSampleReceived
+            )
+            heartRateManager?.createTracker()
+        }
+
+        if (supportedTypes.contains(HealthTrackerType.PPG_CONTINUOUS)) {
+            ppgManager = PpgTrackerManager(
+                healthTrackingService,
+                onSampleReceived
+            )
+            ppgManager?.createTracker()
+        }
+
+        if (supportedTypes.contains(HealthTrackerType.ACCELEROMETER_CONTINUOUS)) {
+            accelerometerManager = AccelerometerTrackerManager(
+                healthTrackingService,
+                onSampleReceived
+            )
+            accelerometerManager?.createTracker()
+        }
+
+        if (supportedTypes.contains(HealthTrackerType.SKIN_TEMPERATURE_CONTINUOUS)) {
+            skinTemperatureManager = SkinTemperatureTrackerManager(
+                healthTrackingService,
+                onSampleReceived
+            )
+            skinTemperatureManager?.createTracker()
+        }
+
+        if (supportedTypes.contains(HealthTrackerType.EDA_CONTINUOUS)) {
+            edaManager = EdaTrackerManager(
+                healthTrackingService,
+                onSampleReceived
+            )
+            edaManager?.createTracker()
+        }
+    }
+
+    fun startRecording() {
+        heartRateManager?.startTracking()
+        ppgManager?.startTracking()
+        accelerometerManager?.startTracking()
+        skinTemperatureManager?.startTracking()
+        edaManager?.startTracking()
+    }
+
+    fun stopRecording() {
+        heartRateManager?.stopTracking()
+        ppgManager?.stopTracking()
+        accelerometerManager?.stopTracking()
+        skinTemperatureManager?.stopTracking()
+        edaManager?.stopTracking()
+    }
+}
+```
+
+---
+
+# 11. 저장 스키마 예시
+
+Continuous sensor는 sampling rate와 데이터 구조가 서로 다르기 때문에 초기 연구용 저장은 long-format을 권장한다.
+
+```kotlin
+data class SensorSample(
+    val id: Long = 0L,
+    val subjectId: String,
+    val sessionId: String,
+    val deviceId: String,
+    val sensorType: String,
+    val trackerType: String,
+    val timestamp: Long,
+    val valueName: String,
+    val value: String,
+    val unit: String?,
+    val status: Int?
+)
+```
+
+---
+
+## 11.1 저장 예시
+
+| sensorType | trackerType | valueName | value | unit | status |
+|---|---|---|---|---|---|
+| `HEART_RATE` | `HEART_RATE_CONTINUOUS` | `heart_rate` | `82` | `bpm` | `1` |
+| `IBI` | `HEART_RATE_CONTINUOUS` | `ibi_0` | `732` | `ms` | `0` |
+| `PPG` | `PPG_CONTINUOUS` | `ppg_green` | `123456` | `adc` | `0` |
+| `PPG` | `PPG_CONTINUOUS` | `ppg_red` | `234567` | `raw` | `0` |
+| `PPG` | `PPG_CONTINUOUS` | `ppg_ir` | `345678` | `raw` | `0` |
+| `ACCELEROMETER` | `ACCELEROMETER_CONTINUOUS` | `accelerometer_x_raw` | `125` | `raw` | `null` |
+| `SKIN_TEMPERATURE` | `SKIN_TEMPERATURE_CONTINUOUS` | `object_temperature_celsius` | `34.2` | `°C` | `0` |
+| `EDA` | `EDA_CONTINUOUS` | `skin_conductance_us` | `1.27` | `µS` | `0` |
+
+---
+
+# 12. Continuous Tracker 주의사항
+
+## 12.1 Capability 확인 필수
+
+모든 Galaxy Watch 모델이 모든 continuous tracker를 지원하지 않는다.
+
+```kotlin
+val supportedTypes = healthTrackingService
+    .trackingCapability
+    .supportHealthTrackerTypes
+```
+
+각 tracker 생성 전 반드시 다음처럼 확인한다.
+
+```kotlin
+if (supportedTypes.contains(HealthTrackerType.PPG_CONTINUOUS)) {
+    // create PPG tracker
+}
+```
+
+---
+
+## 12.2 Status 저장 필수
+
+Heart Rate, IBI, PPG, Skin Temperature, EDA는 status 값을 함께 제공한다.
+
+분석 시 raw value만 저장하면 품질 필터링이 어렵다.
+
+따라서 다음 값을 반드시 저장한다.
+
+```text
+timestamp
+trackerType
+sensorType
+valueName
+value
+status
+```
+
+---
+
+## 12.3 On-demand와 동시 실행 주의
+
+BIA, ECG, SpO₂ 등 on-demand tracker는 continuous tracker와 동시에 사용할 때 일부 값이 invalid가 될 수 있다.
+
+권장 흐름:
+
+```text
+continuous tracker 실행
+↓
+on-demand 측정 필요
+↓
+continuous tracker 일시 중지
+↓
+on-demand tracker 실행
+↓
+on-demand tracker 종료
+↓
+continuous tracker 재시작
+```
+
+---
+
+# 13. 공식 문서
+
+- HeartRateSet  
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/ValueKey.HeartRateSet.html
+
+- PpgSet  
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/ValueKey.PpgSet.html
+
+- AccelerometerSet  
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/ValueKey.AccelerometerSet.html
+
+- SkinTemperatureSet  
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/ValueKey.SkinTemperatureSet.html
+
+- EdaSet  
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/ValueKey.EdaSet.html
