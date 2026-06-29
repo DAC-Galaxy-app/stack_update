@@ -2,27 +2,29 @@
 
 ## 1. 목적
 
-이 문서는 Samsung Health Sensor SDK의 ECG 측정 API를 정리한다.
+이 문서는 Samsung Health Sensor SDK의 ECG API를 정리한다.
 
-ECG는 continuous tracker가 아니라 **on-demand tracker**이다. 따라서 일반적인 장시간 연속 측정용이 아니라, 사용자가 워치 전극을 접촉한 상태에서 짧은 시간 동안 측정하는 구조로 설계한다.
+ECG는 `continuous tracker`가 아니라 `on-demand tracker`이다.  
+따라서 장시간 연속 측정용이 아니라, 사용자가 Galaxy Watch의 전극을 접촉한 상태에서 짧은 시간 동안 측정하는 방식으로 설계한다.
 
 ---
 
 ## 2. API 요약
 
-| 항목           | 값                                                           |
-| ------------ | ----------------------------------------------------------- |
-| TrackerType  | `HealthTrackerType.ECG_ON_DEMAND`                           |
-| ValueKey Set | `ValueKey.EcgSet`                                           |
-| 측정 방식        | On-demand                                                   |
-| 권장 파일        | `watch-app/sensor/EcgTrackerManager.kt`                     |
-| 주요 수집값       | ECG waveform, PPG Green, Lead-off flag, Sequence, Threshold |
+| 항목 | 내용 |
+|---|---|
+| TrackerType | `HealthTrackerType.ECG_ON_DEMAND` |
+| ValueKey Set | `ValueKey.EcgSet` |
+| 측정 방식 | On-demand |
+| 권장 파일 | `watch-app/sensor/EcgTrackerManager.kt` |
+| 주요 수집값 | ECG waveform, PPG Green, Lead-off flag, Sequence, ECG threshold |
 
 ---
 
 ## 3. Package / Import
 
 ```kotlin
+import android.util.Log
 import com.samsung.android.service.health.tracking.HealthTracker
 import com.samsung.android.service.health.tracking.HealthTrackingService
 import com.samsung.android.service.health.tracking.data.DataPoint
@@ -38,9 +40,7 @@ import com.samsung.android.service.health.tracking.data.ValueKey
 HealthTrackerType.ECG_ON_DEMAND
 ```
 
-### 의미
-
-`ECG_ON_DEMAND`는 Galaxy Watch에서 ECG 데이터를 측정하기 위한 on-demand tracker type이다.
+`ECG_ON_DEMAND`는 ECG 측정용 `HealthTrackerType`이다.
 
 ```kotlin
 val ecgTracker = healthTrackingService.getHealthTracker(
@@ -56,24 +56,35 @@ val ecgTracker = healthTrackingService.getHealthTracker(
 ValueKey.EcgSet
 ```
 
-`ValueKey.EcgSet`은 `HealthTrackerType.ECG_ON_DEMAND`에서 수신되는 `DataPoint`의 값을 꺼내기 위한 key set이다.
+`ValueKey.EcgSet`은 `ECG_ON_DEMAND`에서 수신되는 `DataPoint` 값을 꺼내기 위한 key set이다.
+
+공식 문서 기준 `ValueKey.EcgSet`은 다음 `ValueKey`를 포함한다.
+
+```kotlin
+ValueKey.EcgSet.ECG_MV
+ValueKey.EcgSet.PPG_GREEN
+ValueKey.EcgSet.LEAD_OFF
+ValueKey.EcgSet.SEQUENCE
+ValueKey.EcgSet.MAX_THRESHOLD_MV
+ValueKey.EcgSet.MIN_THRESHOLD_MV
+```
 
 ---
 
 ## 6. ValueKey 목록
 
-| ValueKey                           | Type      | 의미                               | 단위 / 범위        |
-| ---------------------------------- | --------- | -------------------------------- | -------------- |
-| `ValueKey.EcgSet.ECG_MV`           | `Float`   | ECG waveform value               | millivolts, mV |
-| `ValueKey.EcgSet.PPG_GREEN`        | `Integer` | ECG 측정 중 함께 제공되는 Green PPG value | raw            |
-| `ValueKey.EcgSet.LEAD_OFF`         | `Integer` | 사용자가 워치 전극을 제대로 접촉했는지 나타내는 flag  | `0` 또는 기타 값    |
-| `ValueKey.EcgSet.SEQUENCE`         | `Integer` | ECG data sequence number         | `0 ~ 255`      |
-| `ValueKey.EcgSet.MAX_THRESHOLD_MV` | `Float`   | ECG_MV 최대 threshold              | mV             |
-| `ValueKey.EcgSet.MIN_THRESHOLD_MV` | `Float`   | ECG_MV 최소 threshold              | mV             |
+| ValueKey | Type | 의미 | 단위 / 범위 |
+|---|---|---|---|
+| `ValueKey.EcgSet.ECG_MV` | `Float` | ECG waveform value | millivolts, `mV` |
+| `ValueKey.EcgSet.PPG_GREEN` | `Integer` | ECG 측정 중 함께 제공되는 Green PPG value | raw |
+| `ValueKey.EcgSet.LEAD_OFF` | `Integer` | 사용자가 Galaxy Watch 전극 키를 접촉하고 있는지 나타내는 flag | `0` 또는 기타 값 |
+| `ValueKey.EcgSet.SEQUENCE` | `Integer` | ECG data sequence number | `0 ~ 255` |
+| `ValueKey.EcgSet.MAX_THRESHOLD_MV` | `Float` | `ECG_MV` 최대 threshold | mV |
+| `ValueKey.EcgSet.MIN_THRESHOLD_MV` | `Float` | `ECG_MV` 최소 threshold | mV |
 
 ---
 
-## 7. 각 ValueKey 상세
+## 7. ValueKey 상세
 
 ### 7.1 `ECG_MV`
 
@@ -89,13 +100,13 @@ val ecgMv = dataPoint.getValue(
 )
 ```
 
-| 항목           | 내용               |
-| ------------ | ---------------- |
-| Type         | `Float`          |
-| 의미           | ECG signal value |
-| 단위           | millivolts, `mV` |
-| 저장 변수명       | `ecgMv`          |
-| 저장 valueName | `ecg_mv`         |
+| 항목 | 내용 |
+|---|---|
+| Type | `Float` |
+| 의미 | ECG signal value |
+| 단위 | `mV` |
+| 저장 변수명 | `ecgMv` |
+| 저장 valueName | `ecg_mv` |
 
 ---
 
@@ -113,12 +124,12 @@ val ppgGreen = dataPoint.getValue(
 )
 ```
 
-| 항목           | 내용              |
-| ------------ | --------------- |
-| Type         | `Integer`       |
-| 의미           | Green PPG value |
-| 단위           | raw             |
-| 저장 변수명       | `ppgGreen`      |
+| 항목 | 내용 |
+|---|---|
+| Type | `Integer` |
+| 의미 | Green PPG value |
+| 단위 | raw |
+| 저장 변수명 | `ppgGreen` |
 | 저장 valueName | `ecg_ppg_green` |
 
 ---
@@ -137,9 +148,9 @@ val leadOff = dataPoint.getValue(
 )
 ```
 
-| 값    | 의미                     |
-| ---- | ---------------------- |
-| `0`  | 전극 접촉 정상               |
+| 값 | 의미 |
+|---|---|
+| `0` | Galaxy Watch 전극 키 접촉 정상 |
 | 기타 값 | 손가락이 전극 키에 제대로 접촉하지 않음 |
 
 저장 변수명:
@@ -154,7 +165,7 @@ val leadOff: Int
 lead_off
 ```
 
-분석 시 `LEAD_OFF != 0`인 구간은 ECG 품질 문제가 있을 가능성이 있으므로 별도 필터링 대상으로 둔다.
+`LEAD_OFF != 0`이면 ECG 품질 문제가 있을 가능성이 있으므로 분석 단계에서 제외하거나 별도 flag로 처리한다.
 
 ---
 
@@ -172,15 +183,15 @@ val sequence = dataPoint.getValue(
 )
 ```
 
-| 항목           | 내용                       |
-| ------------ | ------------------------ |
-| Type         | `Integer`                |
-| 의미           | ECG data sequence number |
-| 범위           | `0 ~ 255`                |
-| 저장 변수명       | `sequence`               |
-| 저장 valueName | `sequence`               |
+| 항목 | 내용 |
+|---|---|
+| Type | `Integer` |
+| 의미 | ECG data sequence number |
+| 범위 | `0 ~ 255` |
+| 저장 변수명 | `sequence` |
+| 저장 valueName | `sequence` |
 
-`SEQUENCE`는 ECG waveform sample의 순서를 복원할 때 사용한다.
+`SEQUENCE`는 ECG waveform sample의 순서 복원과 누락 확인에 사용한다.
 
 ---
 
@@ -190,7 +201,7 @@ val sequence = dataPoint.getValue(
 ValueKey.EcgSet.MAX_THRESHOLD_MV
 ```
 
-ECG_MV 값의 최대 threshold이다.
+`ECG_MV` 값의 최대 threshold이다.
 
 ```kotlin
 val maxThresholdMv = dataPoint.getValue(
@@ -198,15 +209,15 @@ val maxThresholdMv = dataPoint.getValue(
 )
 ```
 
-| 항목           | 내용                       |
-| ------------ | ------------------------ |
-| Type         | `Float`                  |
-| 의미           | ECG_MV maximum threshold |
-| 단위           | mV                       |
-| 저장 변수명       | `maxThresholdMv`         |
-| 저장 valueName | `max_threshold_mv`       |
+| 항목 | 내용 |
+|---|---|
+| Type | `Float` |
+| 의미 | ECG_MV maximum threshold |
+| 단위 | `mV` |
+| 저장 변수명 | `maxThresholdMv` |
+| 저장 valueName | `max_threshold_mv` |
 
-ECG_MV 값이 `MAX_THRESHOLD_MV`보다 크면 saturation 상태로 볼 수 있다.
+`ECG_MV > MAX_THRESHOLD_MV`이면 saturation 상태로 보고 재측정이 필요할 수 있다.
 
 ---
 
@@ -216,7 +227,7 @@ ECG_MV 값이 `MAX_THRESHOLD_MV`보다 크면 saturation 상태로 볼 수 있�
 ValueKey.EcgSet.MIN_THRESHOLD_MV
 ```
 
-ECG_MV 값의 최소 threshold이다.
+`ECG_MV` 값의 최소 threshold이다.
 
 ```kotlin
 val minThresholdMv = dataPoint.getValue(
@@ -224,40 +235,49 @@ val minThresholdMv = dataPoint.getValue(
 )
 ```
 
-| 항목           | 내용                       |
-| ------------ | ------------------------ |
-| Type         | `Float`                  |
-| 의미           | ECG_MV minimum threshold |
-| 단위           | mV                       |
-| 저장 변수명       | `minThresholdMv`         |
-| 저장 valueName | `min_threshold_mv`       |
+| 항목 | 내용 |
+|---|---|
+| Type | `Float` |
+| 의미 | ECG_MV minimum threshold |
+| 단위 | `mV` |
+| 저장 변수명 | `minThresholdMv` |
+| 저장 valueName | `min_threshold_mv` |
 
-ECG_MV 값이 `MIN_THRESHOLD_MV`보다 작으면 saturation 상태로 볼 수 있다.
+`ECG_MV < MIN_THRESHOLD_MV`이면 saturation 상태로 보고 재측정이 필요할 수 있다.
 
 ---
 
 ## 8. DataPoint 구조
 
-ECG 측정 시 `onDataReceived()`로 들어오는 `dataPoints`는 센서 상태에 따라 여러 개의 `DataPoint`를 포함한다.
+ECG 측정 시 `onDataReceived()`로 들어오는 ECG data list는 센서 동작 상태에 따라 `5개` 또는 `10개`의 `DataPoint`를 포함할 수 있다.
 
-### 8.1 첫 번째 DataPoint에 포함될 수 있는 값
+### 8.1 DataPoint가 5개인 경우
 
-```kotlin
-ValueKey.EcgSet.ECG_MV
-ValueKey.EcgSet.PPG_GREEN
-ValueKey.EcgSet.LEAD_OFF
-ValueKey.EcgSet.SEQUENCE
-ValueKey.EcgSet.MAX_THRESHOLD_MV
-ValueKey.EcgSet.MIN_THRESHOLD_MV
-```
+| DataPoint | 포함 값 |
+|---|---|
+| 1st `DataPoint` | `ECG_MV`, `PPG_GREEN`, `LEAD_OFF`, `SEQUENCE`, `MAX_THRESHOLD_MV`, `MIN_THRESHOLD_MV` |
+| 2nd `DataPoint` | `ECG_MV` |
+| 3rd `DataPoint` | `ECG_MV` |
+| 4th `DataPoint` | `ECG_MV` |
+| 5th `DataPoint` | `ECG_MV` |
 
-### 8.2 이후 DataPoint에 포함될 수 있는 값
+### 8.2 DataPoint가 10개인 경우
 
-```kotlin
-ValueKey.EcgSet.ECG_MV
-```
+| DataPoint | 포함 값 |
+|---|---|
+| 1st `DataPoint` | `ECG_MV`, `PPG_GREEN`, `LEAD_OFF`, `SEQUENCE`, `MAX_THRESHOLD_MV`, `MIN_THRESHOLD_MV` |
+| 2nd `DataPoint` | `ECG_MV` |
+| 3rd `DataPoint` | `ECG_MV` |
+| 4th `DataPoint` | `ECG_MV` |
+| 5th `DataPoint` | `ECG_MV` |
+| 6th `DataPoint` | `ECG_MV`, `PPG_GREEN` |
+| 7th `DataPoint` | `ECG_MV` |
+| 8th `DataPoint` | `ECG_MV` |
+| 9th `DataPoint` | `ECG_MV` |
+| 10th `DataPoint` | `ECG_MV` |
 
-일부 DataPoint에는 `ECG_MV`만 포함될 수 있으므로, 모든 `DataPoint`에서 모든 key를 무조건 읽는 방식은 피하는 것이 좋다.
+따라서 모든 `DataPoint`에서 모든 `ValueKey`를 무조건 읽으면 안 된다.  
+`ECG_MV`는 여러 `DataPoint`에 반복적으로 포함되지만, `LEAD_OFF`, `SEQUENCE`, threshold 값은 특정 `DataPoint`에만 포함될 수 있다.
 
 ---
 
@@ -277,12 +297,12 @@ val minThresholdMv: Float?
 
 ## 10. 저장 valueName 권장
 
-| valueName          | 의미                       |
-| ------------------ | ------------------------ |
-| `ecg_mv`           | ECG waveform value       |
-| `ecg_ppg_green`    | ECG 측정 중 PPG Green value |
-| `lead_off`         | 전극 접촉 여부                 |
-| `sequence`         | ECG sample sequence      |
+| valueName | 의미 |
+|---|---|
+| `ecg_mv` | ECG waveform value |
+| `ecg_ppg_green` | ECG 측정 중 PPG Green value |
+| `lead_off` | 전극 접촉 여부 |
+| `sequence` | ECG sample sequence |
 | `max_threshold_mv` | ECG_MV maximum threshold |
 | `min_threshold_mv` | ECG_MV minimum threshold |
 
@@ -314,11 +334,15 @@ fun createTracker() {
 
 ## 13. ECG 측정 시작 / 종료
 
+### 13.1 측정 시작
+
 ```kotlin
 fun startMeasurement() {
     ecgTracker?.setEventListener(ecgListener)
 }
 ```
+
+### 13.2 측정 종료
 
 ```kotlin
 fun stopMeasurement() {
@@ -342,8 +366,8 @@ private val ecgListener = object : HealthTracker.TrackerEventListener {
             readPpgGreen(dataPoint, timestamp)
             readLeadOff(dataPoint, timestamp)
             readSequence(dataPoint, timestamp)
-            readMaxThreshold(dataPoint, timestamp)
-            readMinThreshold(dataPoint, timestamp)
+            readMaxThresholdMv(dataPoint, timestamp)
+            readMinThresholdMv(dataPoint, timestamp)
         }
     }
 
@@ -361,7 +385,10 @@ private val ecgListener = object : HealthTracker.TrackerEventListener {
 
 ## 15. Key별 읽기 함수 예시
 
-SDK 버전이나 DataPoint 위치에 따라 모든 key가 항상 들어오지 않을 수 있으므로, 실제 구현에서는 안전하게 예외 처리하거나 key 존재 여부를 확인하는 구조를 권장한다.
+ECG `DataPoint`는 위치에 따라 포함하는 key가 다르다.  
+따라서 key가 없는 `DataPoint`에서 `getValue()`를 호출할 수 있으므로 안전하게 예외 처리한다.
+
+### 15.1 `ECG_MV`
 
 ```kotlin
 private fun readEcgMv(
@@ -386,6 +413,8 @@ private fun readEcgMv(
 }
 ```
 
+### 15.2 `PPG_GREEN`
+
 ```kotlin
 private fun readPpgGreen(
     dataPoint: DataPoint,
@@ -408,6 +437,8 @@ private fun readPpgGreen(
     }
 }
 ```
+
+### 15.3 `LEAD_OFF`
 
 ```kotlin
 private fun readLeadOff(
@@ -432,6 +463,8 @@ private fun readLeadOff(
 }
 ```
 
+### 15.4 `SEQUENCE`
+
 ```kotlin
 private fun readSequence(
     dataPoint: DataPoint,
@@ -455,8 +488,10 @@ private fun readSequence(
 }
 ```
 
+### 15.5 `MAX_THRESHOLD_MV`
+
 ```kotlin
-private fun readMaxThreshold(
+private fun readMaxThresholdMv(
     dataPoint: DataPoint,
     timestamp: Long
 ) {
@@ -478,8 +513,10 @@ private fun readMaxThreshold(
 }
 ```
 
+### 15.6 `MIN_THRESHOLD_MV`
+
 ```kotlin
-private fun readMinThreshold(
+private fun readMinThresholdMv(
     dataPoint: DataPoint,
     timestamp: Long
 ) {
@@ -544,8 +581,8 @@ class EcgTrackerManager(
                 readPpgGreen(dataPoint, timestamp)
                 readLeadOff(dataPoint, timestamp)
                 readSequence(dataPoint, timestamp)
-                readMaxThreshold(dataPoint, timestamp)
-                readMinThreshold(dataPoint, timestamp)
+                readMaxThresholdMv(dataPoint, timestamp)
+                readMinThresholdMv(dataPoint, timestamp)
             }
         }
 
@@ -642,7 +679,7 @@ class EcgTrackerManager(
         }
     }
 
-    private fun readMaxThreshold(
+    private fun readMaxThresholdMv(
         dataPoint: DataPoint,
         timestamp: Long
     ) {
@@ -663,7 +700,7 @@ class EcgTrackerManager(
         }
     }
 
-    private fun readMinThreshold(
+    private fun readMinThresholdMv(
         dataPoint: DataPoint,
         timestamp: Long
     ) {
@@ -690,6 +727,8 @@ class EcgTrackerManager(
 
 ## 17. 저장 스키마 예시
 
+### 17.1 ECG 전용 테이블
+
 ```kotlin
 data class EcgSample(
     val id: Long = 0L,
@@ -705,7 +744,7 @@ data class EcgSample(
 )
 ```
 
-또는 전체 센서 공통 long-format 저장 시:
+### 17.2 전체 센서 공통 long-format
 
 ```kotlin
 data class SensorSample(
@@ -727,14 +766,14 @@ data class SensorSample(
 
 ## 18. Long-format 저장 예시
 
-| sensorType | trackerType     | valueName          | value    | unit    | status |
-| ---------- | --------------- | ------------------ | -------- | ------- | ------ |
-| `ECG`      | `ECG_ON_DEMAND` | `ecg_mv`           | `0.124`  | `mV`    | `null` |
-| `ECG`      | `ECG_ON_DEMAND` | `ecg_ppg_green`    | `123456` | `raw`   | `null` |
-| `ECG`      | `ECG_ON_DEMAND` | `lead_off`         | `0`      | `flag`  | `0`    |
-| `ECG`      | `ECG_ON_DEMAND` | `sequence`         | `12`     | `index` | `null` |
-| `ECG`      | `ECG_ON_DEMAND` | `max_threshold_mv` | `1.5`    | `mV`    | `null` |
-| `ECG`      | `ECG_ON_DEMAND` | `min_threshold_mv` | `-1.5`   | `mV`    | `null` |
+| sensorType | trackerType | valueName | value | unit | status |
+|---|---|---|---|---|---|
+| `ECG` | `ECG_ON_DEMAND` | `ecg_mv` | `0.124` | `mV` | `null` |
+| `ECG` | `ECG_ON_DEMAND` | `ecg_ppg_green` | `123456` | `raw` | `null` |
+| `ECG` | `ECG_ON_DEMAND` | `lead_off` | `0` | `flag` | `0` |
+| `ECG` | `ECG_ON_DEMAND` | `sequence` | `12` | `index` | `null` |
+| `ECG` | `ECG_ON_DEMAND` | `max_threshold_mv` | `1.5` | `mV` | `null` |
+| `ECG` | `ECG_ON_DEMAND` | `min_threshold_mv` | `-1.5` | `mV` | `null` |
 
 ---
 
@@ -744,11 +783,11 @@ data class SensorSample(
 
 ```kotlin
 if (leadOff != 0) {
-    // electrode contact problem
+    // Electrode contact problem
 }
 ```
 
-`LEAD_OFF` 값이 `0`이 아니면 사용자가 전극을 제대로 접촉하지 않은 상태로 볼 수 있다.
+`LEAD_OFF` 값이 `0`이 아니면 사용자가 전극을 제대로 접촉하지 않은 상태로 본다.
 
 ---
 
@@ -760,7 +799,7 @@ if (ecgMv > maxThresholdMv || ecgMv < minThresholdMv) {
 }
 ```
 
-ECG 값이 threshold 범위를 벗어나면 saturation 가능성이 있다.
+`ECG_MV`가 threshold 범위를 벗어나면 saturation 상태로 보고 재측정이 필요할 수 있다.
 
 ---
 
@@ -770,7 +809,7 @@ ECG 값이 threshold 범위를 벗어나면 saturation 가능성이 있다.
 // sequence discontinuity check
 ```
 
-`SEQUENCE`는 `0 ~ 255` 범위에서 제공되므로 ECG sample 순서 복원과 누락 확인에 활용할 수 있다.
+`SEQUENCE`는 `0 ~ 255` 범위에서 제공된다. ECG sample 순서 복원과 누락 확인에 활용한다.
 
 ---
 
@@ -778,13 +817,13 @@ ECG 값이 threshold 범위를 벗어나면 saturation 가능성이 있다.
 
 ```text
 1. HealthTrackingService 연결
-2. capability 확인
+2. Capability 확인
 3. ECG_ON_DEMAND 지원 여부 확인
 4. ECG tracker 생성
 5. 사용자에게 착용/전극 접촉 안내
 6. setEventListener() 호출
 7. onDataReceived()에서 ECG DataPoint 수신
-8. ECG_MV, PPG_GREEN, LEAD_OFF, SEQUENCE, THRESHOLD 저장
+8. ECG_MV, PPG_GREEN, LEAD_OFF, SEQUENCE, threshold 저장
 9. 측정 종료 시 unsetEventListener()
 10. 데이터 저장 또는 Phone App 전송
 ```
@@ -813,7 +852,7 @@ if (isEcgSupported(supportedTypes)) {
 
 ---
 
-## 22. On-demand 주의사항
+## 22. On-demand 사용 주의사항
 
 ECG는 on-demand tracker이므로 다음 구조를 권장한다.
 
@@ -833,25 +872,27 @@ ECG listener 해제
 continuous tracker 재시작
 ```
 
-이유:
+주의사항:
 
-* ECG는 foreground 측정 중심이다.
-* 사용자의 전극 접촉이 필요하다.
-* continuous sensor와 동시에 실행하면 일부 값의 품질 문제가 생길 수 있다.
-* 측정 중 `LEAD_OFF`, threshold, sequence를 반드시 저장해야 한다.
+- ECG는 foreground 측정 중심으로 설계한다.
+- 사용자의 전극 접촉이 필요하다.
+- `LEAD_OFF` 값을 반드시 저장한다.
+- `SEQUENCE` 값을 저장해 sample 순서와 누락 여부를 확인한다.
+- `MAX_THRESHOLD_MV`, `MIN_THRESHOLD_MV`를 저장해 saturation 여부를 판단한다.
+- ECG 측정 중 continuous tracker 값을 함께 사용할 경우 품질 문제가 생길 수 있으므로 세션을 분리하는 것이 안전하다.
 
 ---
 
 ## 23. 공식 문서 링크
 
-* `ValueKey.EcgSet`
+- `ValueKey.EcgSet`  
   https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/ValueKey.EcgSet.html
 
-* `HealthTrackerType`
+- `HealthTrackerType`  
   https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/HealthTrackerType.html
 
-* `DataPoint`
+- `DataPoint`  
   https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/DataPoint.html
 
-* `HealthTracker.TrackerEventListener`
+- `HealthTracker.TrackerEventListener`  
   https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/HealthTracker.TrackerEventListener.html
