@@ -1,0 +1,857 @@
+# 03. Samsung Health Sensor SDK ECG API
+
+## 1. 목적
+
+이 문서는 Samsung Health Sensor SDK의 ECG 측정 API를 정리한다.
+
+ECG는 continuous tracker가 아니라 **on-demand tracker**이다. 따라서 일반적인 장시간 연속 측정용이 아니라, 사용자가 워치 전극을 접촉한 상태에서 짧은 시간 동안 측정하는 구조로 설계한다.
+
+---
+
+## 2. API 요약
+
+| 항목           | 값                                                           |
+| ------------ | ----------------------------------------------------------- |
+| TrackerType  | `HealthTrackerType.ECG_ON_DEMAND`                           |
+| ValueKey Set | `ValueKey.EcgSet`                                           |
+| 측정 방식        | On-demand                                                   |
+| 권장 파일        | `watch-app/sensor/EcgTrackerManager.kt`                     |
+| 주요 수집값       | ECG waveform, PPG Green, Lead-off flag, Sequence, Threshold |
+
+---
+
+## 3. Package / Import
+
+```kotlin
+import com.samsung.android.service.health.tracking.HealthTracker
+import com.samsung.android.service.health.tracking.HealthTrackingService
+import com.samsung.android.service.health.tracking.data.DataPoint
+import com.samsung.android.service.health.tracking.data.HealthTrackerType
+import com.samsung.android.service.health.tracking.data.ValueKey
+```
+
+---
+
+## 4. TrackerType
+
+```kotlin
+HealthTrackerType.ECG_ON_DEMAND
+```
+
+### 의미
+
+`ECG_ON_DEMAND`는 Galaxy Watch에서 ECG 데이터를 측정하기 위한 on-demand tracker type이다.
+
+```kotlin
+val ecgTracker = healthTrackingService.getHealthTracker(
+    HealthTrackerType.ECG_ON_DEMAND
+)
+```
+
+---
+
+## 5. ValueKey Set
+
+```kotlin
+ValueKey.EcgSet
+```
+
+`ValueKey.EcgSet`은 `HealthTrackerType.ECG_ON_DEMAND`에서 수신되는 `DataPoint`의 값을 꺼내기 위한 key set이다.
+
+---
+
+## 6. ValueKey 목록
+
+| ValueKey                           | Type      | 의미                               | 단위 / 범위        |
+| ---------------------------------- | --------- | -------------------------------- | -------------- |
+| `ValueKey.EcgSet.ECG_MV`           | `Float`   | ECG waveform value               | millivolts, mV |
+| `ValueKey.EcgSet.PPG_GREEN`        | `Integer` | ECG 측정 중 함께 제공되는 Green PPG value | raw            |
+| `ValueKey.EcgSet.LEAD_OFF`         | `Integer` | 사용자가 워치 전극을 제대로 접촉했는지 나타내는 flag  | `0` 또는 기타 값    |
+| `ValueKey.EcgSet.SEQUENCE`         | `Integer` | ECG data sequence number         | `0 ~ 255`      |
+| `ValueKey.EcgSet.MAX_THRESHOLD_MV` | `Float`   | ECG_MV 최대 threshold              | mV             |
+| `ValueKey.EcgSet.MIN_THRESHOLD_MV` | `Float`   | ECG_MV 최소 threshold              | mV             |
+
+---
+
+## 7. 각 ValueKey 상세
+
+### 7.1 `ECG_MV`
+
+```kotlin
+ValueKey.EcgSet.ECG_MV
+```
+
+ECG waveform 값이다.
+
+```kotlin
+val ecgMv = dataPoint.getValue(
+    ValueKey.EcgSet.ECG_MV
+)
+```
+
+| 항목           | 내용               |
+| ------------ | ---------------- |
+| Type         | `Float`          |
+| 의미           | ECG signal value |
+| 단위           | millivolts, `mV` |
+| 저장 변수명       | `ecgMv`          |
+| 저장 valueName | `ecg_mv`         |
+
+---
+
+### 7.2 `PPG_GREEN`
+
+```kotlin
+ValueKey.EcgSet.PPG_GREEN
+```
+
+ECG 측정 중 함께 제공되는 Green PPG 값이다.
+
+```kotlin
+val ppgGreen = dataPoint.getValue(
+    ValueKey.EcgSet.PPG_GREEN
+)
+```
+
+| 항목           | 내용              |
+| ------------ | --------------- |
+| Type         | `Integer`       |
+| 의미           | Green PPG value |
+| 단위           | raw             |
+| 저장 변수명       | `ppgGreen`      |
+| 저장 valueName | `ecg_ppg_green` |
+
+---
+
+### 7.3 `LEAD_OFF`
+
+```kotlin
+ValueKey.EcgSet.LEAD_OFF
+```
+
+사용자가 Galaxy Watch의 전극 키를 제대로 접촉하고 있는지 나타내는 flag이다.
+
+```kotlin
+val leadOff = dataPoint.getValue(
+    ValueKey.EcgSet.LEAD_OFF
+)
+```
+
+| 값    | 의미                     |
+| ---- | ---------------------- |
+| `0`  | 전극 접촉 정상               |
+| 기타 값 | 손가락이 전극 키에 제대로 접촉하지 않음 |
+
+저장 변수명:
+
+```kotlin
+val leadOff: Int
+```
+
+저장 valueName:
+
+```text
+lead_off
+```
+
+분석 시 `LEAD_OFF != 0`인 구간은 ECG 품질 문제가 있을 가능성이 있으므로 별도 필터링 대상으로 둔다.
+
+---
+
+### 7.4 `SEQUENCE`
+
+```kotlin
+ValueKey.EcgSet.SEQUENCE
+```
+
+ECG data의 sequence number이다.
+
+```kotlin
+val sequence = dataPoint.getValue(
+    ValueKey.EcgSet.SEQUENCE
+)
+```
+
+| 항목           | 내용                       |
+| ------------ | ------------------------ |
+| Type         | `Integer`                |
+| 의미           | ECG data sequence number |
+| 범위           | `0 ~ 255`                |
+| 저장 변수명       | `sequence`               |
+| 저장 valueName | `sequence`               |
+
+`SEQUENCE`는 ECG waveform sample의 순서를 복원할 때 사용한다.
+
+---
+
+### 7.5 `MAX_THRESHOLD_MV`
+
+```kotlin
+ValueKey.EcgSet.MAX_THRESHOLD_MV
+```
+
+ECG_MV 값의 최대 threshold이다.
+
+```kotlin
+val maxThresholdMv = dataPoint.getValue(
+    ValueKey.EcgSet.MAX_THRESHOLD_MV
+)
+```
+
+| 항목           | 내용                       |
+| ------------ | ------------------------ |
+| Type         | `Float`                  |
+| 의미           | ECG_MV maximum threshold |
+| 단위           | mV                       |
+| 저장 변수명       | `maxThresholdMv`         |
+| 저장 valueName | `max_threshold_mv`       |
+
+ECG_MV 값이 `MAX_THRESHOLD_MV`보다 크면 saturation 상태로 볼 수 있다.
+
+---
+
+### 7.6 `MIN_THRESHOLD_MV`
+
+```kotlin
+ValueKey.EcgSet.MIN_THRESHOLD_MV
+```
+
+ECG_MV 값의 최소 threshold이다.
+
+```kotlin
+val minThresholdMv = dataPoint.getValue(
+    ValueKey.EcgSet.MIN_THRESHOLD_MV
+)
+```
+
+| 항목           | 내용                       |
+| ------------ | ------------------------ |
+| Type         | `Float`                  |
+| 의미           | ECG_MV minimum threshold |
+| 단위           | mV                       |
+| 저장 변수명       | `minThresholdMv`         |
+| 저장 valueName | `min_threshold_mv`       |
+
+ECG_MV 값이 `MIN_THRESHOLD_MV`보다 작으면 saturation 상태로 볼 수 있다.
+
+---
+
+## 8. DataPoint 구조
+
+ECG 측정 시 `onDataReceived()`로 들어오는 `dataPoints`는 센서 상태에 따라 여러 개의 `DataPoint`를 포함한다.
+
+### 8.1 첫 번째 DataPoint에 포함될 수 있는 값
+
+```kotlin
+ValueKey.EcgSet.ECG_MV
+ValueKey.EcgSet.PPG_GREEN
+ValueKey.EcgSet.LEAD_OFF
+ValueKey.EcgSet.SEQUENCE
+ValueKey.EcgSet.MAX_THRESHOLD_MV
+ValueKey.EcgSet.MIN_THRESHOLD_MV
+```
+
+### 8.2 이후 DataPoint에 포함될 수 있는 값
+
+```kotlin
+ValueKey.EcgSet.ECG_MV
+```
+
+일부 DataPoint에는 `ECG_MV`만 포함될 수 있으므로, 모든 `DataPoint`에서 모든 key를 무조건 읽는 방식은 피하는 것이 좋다.
+
+---
+
+## 9. 저장 변수명 권장
+
+```kotlin
+val timestamp: Long
+val ecgMv: Float?
+val ppgGreen: Int?
+val leadOff: Int?
+val sequence: Int?
+val maxThresholdMv: Float?
+val minThresholdMv: Float?
+```
+
+---
+
+## 10. 저장 valueName 권장
+
+| valueName          | 의미                       |
+| ------------------ | ------------------------ |
+| `ecg_mv`           | ECG waveform value       |
+| `ecg_ppg_green`    | ECG 측정 중 PPG Green value |
+| `lead_off`         | 전극 접촉 여부                 |
+| `sequence`         | ECG sample sequence      |
+| `max_threshold_mv` | ECG_MV maximum threshold |
+| `min_threshold_mv` | ECG_MV minimum threshold |
+
+---
+
+## 11. 권장 파일 위치
+
+```text
+watch-app/
+└── sensor/
+    └── EcgTrackerManager.kt
+```
+
+---
+
+## 12. ECG Tracker 생성
+
+```kotlin
+private var ecgTracker: HealthTracker? = null
+
+fun createTracker() {
+    ecgTracker = healthTrackingService.getHealthTracker(
+        HealthTrackerType.ECG_ON_DEMAND
+    )
+}
+```
+
+---
+
+## 13. ECG 측정 시작 / 종료
+
+```kotlin
+fun startMeasurement() {
+    ecgTracker?.setEventListener(ecgListener)
+}
+```
+
+```kotlin
+fun stopMeasurement() {
+    ecgTracker?.unsetEventListener()
+}
+```
+
+---
+
+## 14. ECG Listener 예시
+
+```kotlin
+private val ecgListener = object : HealthTracker.TrackerEventListener {
+
+    override fun onDataReceived(dataPoints: List<DataPoint>) {
+        dataPoints.forEach { dataPoint ->
+
+            val timestamp = dataPoint.timestamp
+
+            readEcgMv(dataPoint, timestamp)
+            readPpgGreen(dataPoint, timestamp)
+            readLeadOff(dataPoint, timestamp)
+            readSequence(dataPoint, timestamp)
+            readMaxThreshold(dataPoint, timestamp)
+            readMinThreshold(dataPoint, timestamp)
+        }
+    }
+
+    override fun onFlushCompleted() {
+        Log.d("EcgTracker", "Flush completed")
+    }
+
+    override fun onError(error: HealthTracker.TrackerError) {
+        Log.e("EcgTracker", "Error: $error")
+    }
+}
+```
+
+---
+
+## 15. Key별 읽기 함수 예시
+
+SDK 버전이나 DataPoint 위치에 따라 모든 key가 항상 들어오지 않을 수 있으므로, 실제 구현에서는 안전하게 예외 처리하거나 key 존재 여부를 확인하는 구조를 권장한다.
+
+```kotlin
+private fun readEcgMv(
+    dataPoint: DataPoint,
+    timestamp: Long
+) {
+    try {
+        val ecgMv = dataPoint.getValue(
+            ValueKey.EcgSet.ECG_MV
+        )
+
+        onSampleReceived(
+            "ECG",
+            timestamp,
+            "ecg_mv",
+            ecgMv.toString(),
+            null
+        )
+    } catch (e: Exception) {
+        Log.d("EcgTracker", "ECG_MV not available in this DataPoint")
+    }
+}
+```
+
+```kotlin
+private fun readPpgGreen(
+    dataPoint: DataPoint,
+    timestamp: Long
+) {
+    try {
+        val ppgGreen = dataPoint.getValue(
+            ValueKey.EcgSet.PPG_GREEN
+        )
+
+        onSampleReceived(
+            "ECG",
+            timestamp,
+            "ecg_ppg_green",
+            ppgGreen.toString(),
+            null
+        )
+    } catch (e: Exception) {
+        Log.d("EcgTracker", "PPG_GREEN not available in this DataPoint")
+    }
+}
+```
+
+```kotlin
+private fun readLeadOff(
+    dataPoint: DataPoint,
+    timestamp: Long
+) {
+    try {
+        val leadOff = dataPoint.getValue(
+            ValueKey.EcgSet.LEAD_OFF
+        )
+
+        onSampleReceived(
+            "ECG",
+            timestamp,
+            "lead_off",
+            leadOff.toString(),
+            leadOff
+        )
+    } catch (e: Exception) {
+        Log.d("EcgTracker", "LEAD_OFF not available in this DataPoint")
+    }
+}
+```
+
+```kotlin
+private fun readSequence(
+    dataPoint: DataPoint,
+    timestamp: Long
+) {
+    try {
+        val sequence = dataPoint.getValue(
+            ValueKey.EcgSet.SEQUENCE
+        )
+
+        onSampleReceived(
+            "ECG",
+            timestamp,
+            "sequence",
+            sequence.toString(),
+            null
+        )
+    } catch (e: Exception) {
+        Log.d("EcgTracker", "SEQUENCE not available in this DataPoint")
+    }
+}
+```
+
+```kotlin
+private fun readMaxThreshold(
+    dataPoint: DataPoint,
+    timestamp: Long
+) {
+    try {
+        val maxThresholdMv = dataPoint.getValue(
+            ValueKey.EcgSet.MAX_THRESHOLD_MV
+        )
+
+        onSampleReceived(
+            "ECG",
+            timestamp,
+            "max_threshold_mv",
+            maxThresholdMv.toString(),
+            null
+        )
+    } catch (e: Exception) {
+        Log.d("EcgTracker", "MAX_THRESHOLD_MV not available in this DataPoint")
+    }
+}
+```
+
+```kotlin
+private fun readMinThreshold(
+    dataPoint: DataPoint,
+    timestamp: Long
+) {
+    try {
+        val minThresholdMv = dataPoint.getValue(
+            ValueKey.EcgSet.MIN_THRESHOLD_MV
+        )
+
+        onSampleReceived(
+            "ECG",
+            timestamp,
+            "min_threshold_mv",
+            minThresholdMv.toString(),
+            null
+        )
+    } catch (e: Exception) {
+        Log.d("EcgTracker", "MIN_THRESHOLD_MV not available in this DataPoint")
+    }
+}
+```
+
+---
+
+## 16. 전체 `EcgTrackerManager.kt` 예시
+
+```kotlin
+class EcgTrackerManager(
+    private val healthTrackingService: HealthTrackingService,
+    private val onSampleReceived: (
+        sensorType: String,
+        timestamp: Long,
+        valueName: String,
+        value: String,
+        status: Int?
+    ) -> Unit
+) {
+
+    private var ecgTracker: HealthTracker? = null
+
+    fun createTracker() {
+        ecgTracker = healthTrackingService.getHealthTracker(
+            HealthTrackerType.ECG_ON_DEMAND
+        )
+    }
+
+    fun startMeasurement() {
+        ecgTracker?.setEventListener(ecgListener)
+    }
+
+    fun stopMeasurement() {
+        ecgTracker?.unsetEventListener()
+    }
+
+    private val ecgListener = object : HealthTracker.TrackerEventListener {
+
+        override fun onDataReceived(dataPoints: List<DataPoint>) {
+            dataPoints.forEach { dataPoint ->
+
+                val timestamp = dataPoint.timestamp
+
+                readEcgMv(dataPoint, timestamp)
+                readPpgGreen(dataPoint, timestamp)
+                readLeadOff(dataPoint, timestamp)
+                readSequence(dataPoint, timestamp)
+                readMaxThreshold(dataPoint, timestamp)
+                readMinThreshold(dataPoint, timestamp)
+            }
+        }
+
+        override fun onFlushCompleted() {
+            Log.d("EcgTracker", "Flush completed")
+        }
+
+        override fun onError(error: HealthTracker.TrackerError) {
+            Log.e("EcgTracker", "Error: $error")
+        }
+    }
+
+    private fun readEcgMv(
+        dataPoint: DataPoint,
+        timestamp: Long
+    ) {
+        try {
+            val ecgMv = dataPoint.getValue(
+                ValueKey.EcgSet.ECG_MV
+            )
+
+            onSampleReceived(
+                "ECG",
+                timestamp,
+                "ecg_mv",
+                ecgMv.toString(),
+                null
+            )
+        } catch (e: Exception) {
+            Log.d("EcgTracker", "ECG_MV not available")
+        }
+    }
+
+    private fun readPpgGreen(
+        dataPoint: DataPoint,
+        timestamp: Long
+    ) {
+        try {
+            val ppgGreen = dataPoint.getValue(
+                ValueKey.EcgSet.PPG_GREEN
+            )
+
+            onSampleReceived(
+                "ECG",
+                timestamp,
+                "ecg_ppg_green",
+                ppgGreen.toString(),
+                null
+            )
+        } catch (e: Exception) {
+            Log.d("EcgTracker", "PPG_GREEN not available")
+        }
+    }
+
+    private fun readLeadOff(
+        dataPoint: DataPoint,
+        timestamp: Long
+    ) {
+        try {
+            val leadOff = dataPoint.getValue(
+                ValueKey.EcgSet.LEAD_OFF
+            )
+
+            onSampleReceived(
+                "ECG",
+                timestamp,
+                "lead_off",
+                leadOff.toString(),
+                leadOff
+            )
+        } catch (e: Exception) {
+            Log.d("EcgTracker", "LEAD_OFF not available")
+        }
+    }
+
+    private fun readSequence(
+        dataPoint: DataPoint,
+        timestamp: Long
+    ) {
+        try {
+            val sequence = dataPoint.getValue(
+                ValueKey.EcgSet.SEQUENCE
+            )
+
+            onSampleReceived(
+                "ECG",
+                timestamp,
+                "sequence",
+                sequence.toString(),
+                null
+            )
+        } catch (e: Exception) {
+            Log.d("EcgTracker", "SEQUENCE not available")
+        }
+    }
+
+    private fun readMaxThreshold(
+        dataPoint: DataPoint,
+        timestamp: Long
+    ) {
+        try {
+            val maxThresholdMv = dataPoint.getValue(
+                ValueKey.EcgSet.MAX_THRESHOLD_MV
+            )
+
+            onSampleReceived(
+                "ECG",
+                timestamp,
+                "max_threshold_mv",
+                maxThresholdMv.toString(),
+                null
+            )
+        } catch (e: Exception) {
+            Log.d("EcgTracker", "MAX_THRESHOLD_MV not available")
+        }
+    }
+
+    private fun readMinThreshold(
+        dataPoint: DataPoint,
+        timestamp: Long
+    ) {
+        try {
+            val minThresholdMv = dataPoint.getValue(
+                ValueKey.EcgSet.MIN_THRESHOLD_MV
+            )
+
+            onSampleReceived(
+                "ECG",
+                timestamp,
+                "min_threshold_mv",
+                minThresholdMv.toString(),
+                null
+            )
+        } catch (e: Exception) {
+            Log.d("EcgTracker", "MIN_THRESHOLD_MV not available")
+        }
+    }
+}
+```
+
+---
+
+## 17. 저장 스키마 예시
+
+```kotlin
+data class EcgSample(
+    val id: Long = 0L,
+    val subjectId: String,
+    val sessionId: String,
+    val timestamp: Long,
+    val sequence: Int?,
+    val ecgMv: Float?,
+    val ppgGreen: Int?,
+    val leadOff: Int?,
+    val maxThresholdMv: Float?,
+    val minThresholdMv: Float?
+)
+```
+
+또는 전체 센서 공통 long-format 저장 시:
+
+```kotlin
+data class SensorSample(
+    val id: Long = 0L,
+    val subjectId: String,
+    val sessionId: String,
+    val deviceId: String,
+    val sensorType: String,
+    val trackerType: String,
+    val timestamp: Long,
+    val valueName: String,
+    val value: String,
+    val unit: String?,
+    val status: Int?
+)
+```
+
+---
+
+## 18. Long-format 저장 예시
+
+| sensorType | trackerType     | valueName          | value    | unit    | status |
+| ---------- | --------------- | ------------------ | -------- | ------- | ------ |
+| `ECG`      | `ECG_ON_DEMAND` | `ecg_mv`           | `0.124`  | `mV`    | `null` |
+| `ECG`      | `ECG_ON_DEMAND` | `ecg_ppg_green`    | `123456` | `raw`   | `null` |
+| `ECG`      | `ECG_ON_DEMAND` | `lead_off`         | `0`      | `flag`  | `0`    |
+| `ECG`      | `ECG_ON_DEMAND` | `sequence`         | `12`     | `index` | `null` |
+| `ECG`      | `ECG_ON_DEMAND` | `max_threshold_mv` | `1.5`    | `mV`    | `null` |
+| `ECG`      | `ECG_ON_DEMAND` | `min_threshold_mv` | `-1.5`   | `mV`    | `null` |
+
+---
+
+## 19. ECG 품질 관리 기준
+
+### 19.1 Lead-off 확인
+
+```kotlin
+if (leadOff != 0) {
+    // electrode contact problem
+}
+```
+
+`LEAD_OFF` 값이 `0`이 아니면 사용자가 전극을 제대로 접촉하지 않은 상태로 볼 수 있다.
+
+---
+
+### 19.2 Saturation 확인
+
+```kotlin
+if (ecgMv > maxThresholdMv || ecgMv < minThresholdMv) {
+    // ECG saturation
+}
+```
+
+ECG 값이 threshold 범위를 벗어나면 saturation 가능성이 있다.
+
+---
+
+### 19.3 Sequence 확인
+
+```kotlin
+// sequence discontinuity check
+```
+
+`SEQUENCE`는 `0 ~ 255` 범위에서 제공되므로 ECG sample 순서 복원과 누락 확인에 활용할 수 있다.
+
+---
+
+## 20. ECG 측정 권장 흐름
+
+```text
+1. HealthTrackingService 연결
+2. capability 확인
+3. ECG_ON_DEMAND 지원 여부 확인
+4. ECG tracker 생성
+5. 사용자에게 착용/전극 접촉 안내
+6. setEventListener() 호출
+7. onDataReceived()에서 ECG DataPoint 수신
+8. ECG_MV, PPG_GREEN, LEAD_OFF, SEQUENCE, THRESHOLD 저장
+9. 측정 종료 시 unsetEventListener()
+10. 데이터 저장 또는 Phone App 전송
+```
+
+---
+
+## 21. Capability 확인 예시
+
+```kotlin
+fun isEcgSupported(
+    supportedTypes: List<HealthTrackerType>
+): Boolean {
+    return supportedTypes.contains(
+        HealthTrackerType.ECG_ON_DEMAND
+    )
+}
+```
+
+사용 예:
+
+```kotlin
+if (isEcgSupported(supportedTypes)) {
+    ecgTrackerManager.createTracker()
+}
+```
+
+---
+
+## 22. On-demand 주의사항
+
+ECG는 on-demand tracker이므로 다음 구조를 권장한다.
+
+```text
+continuous tracker 실행 중
+↓
+ECG 측정 요청
+↓
+continuous tracker 일시 중지
+↓
+ECG_ON_DEMAND 실행
+↓
+ECG 측정 종료
+↓
+ECG listener 해제
+↓
+continuous tracker 재시작
+```
+
+이유:
+
+* ECG는 foreground 측정 중심이다.
+* 사용자의 전극 접촉이 필요하다.
+* continuous sensor와 동시에 실행하면 일부 값의 품질 문제가 생길 수 있다.
+* 측정 중 `LEAD_OFF`, threshold, sequence를 반드시 저장해야 한다.
+
+---
+
+## 23. 공식 문서 링크
+
+* `ValueKey.EcgSet`
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/ValueKey.EcgSet.html
+
+* `HealthTrackerType`
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/HealthTrackerType.html
+
+* `DataPoint`
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/data/DataPoint.html
+
+* `HealthTracker.TrackerEventListener`
+  https://developer.samsung.com/health/sensor/api-reference/com/samsung/android/service/health/tracking/HealthTracker.TrackerEventListener.html
