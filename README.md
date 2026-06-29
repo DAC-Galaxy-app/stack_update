@@ -9,4 +9,5 @@
 # 참고 주소
 ### Samsung Health Research Stack 
 https://github.com/S-HealthStack
-
+### Samsung Health Sensor SDK
+https://developer.samsung.com/health/sensor/api-reference/overview-summary.html#
